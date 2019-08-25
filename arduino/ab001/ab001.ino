@@ -33,7 +33,7 @@
 volatile int interruptCounter2;   /* 給水時割り込みカウンタ */
 volatile long _1msecCounterAtWakeUp=0;  /* メイン割り込み回数カウンタ */
 volatile int  _100msecCounterAtWaterServe=0;  /* 給水時割り込み回数カウンタ */
-hw_timer_t *timer1 = NULL; /* ウェークアップ時割り込み制御用構造体 */
+hw_timer_t *timer1 = NULL; /* ウェイクアップ時割り込み制御用構造体 */
 hw_timer_t *timer2 = NULL; /* 給水時割り込み制御用用構造体 */
 portMUX_TYPE timerMux1=portMUX_INITIALIZER_UNLOCKED; 
 portMUX_TYPE timerMux2=portMUX_INITIALIZER_UNLOCKED; 
@@ -217,25 +217,18 @@ void setup_pwm() {
 double ReadVoltage(){
   const int nmx=50;
   double cnt=0.0;
-  double reading,sx=0;
+  int reading[nmx];
+  double median;
   int i;
 
   adcAttachPin(ADC_PIN);
   analogSetClockDiv(255); // 1338mS
-  for (i=1;i<=nmx;i++) {
-    reading = analogRead(ADC_PIN); // Reference voltage is 3v3 so maximum reading is 3v3 = 4095 in range 0 to 4095
-    if(reading > 0 && reading <= 4095) {
-      sx = sx + reading;
-      cnt = cnt + 1.0;
-    }
+  for (i=0;i<nmx;i++) {
+    reading[i] = analogRead(ADC_PIN); // Reference voltage is 3v3 so maximum reading is 3v3 = 4095 in range 0 to 4095
   }
-  if (cnt>0) {
-    reading = sx/cnt;
-    // Added an improved polynomial, use either, comment out as required
-    return -0.000000000000016 * pow(reading,4) + 0.000000000118171 * pow(reading,3)- 0.000000301211691 * pow(reading,2)+ 0.001109019271794 * reading + 0.034143524634089;
-  } else {
-      return 0;    
-  }
+  asc_sort(reading, nmx);
+  median = reading[nmx/2];
+  return -0.000000000000016 * pow(median,4) + 0.000000000118171 * pow(median,3)- 0.000000301211691 * pow(median,2)+ 0.001109019271794 * median + 0.034143524634089;
 }
  
 void CheckVoltageLow(){
@@ -416,9 +409,11 @@ void setup(){
   timerAlarmDisable(timer1); 
   setup_pwm();
   WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(ip, ip, subnet); // IPアドレス、ゲートウェイ、サブネットマスクの設定  
-  WiFi.softAP(ssid);
   delay(500); 
+  WiFi.softAPConfig(ip, ip, subnet); // IPアドレス、ゲートウェイ、サブネットマスクの設定  
+  delay(500); 
+ // WiFi.softAP(ssid);
+  IPAddress serverIP = WiFi.softAPIP();
   if(!SPIFFS.begin()){
        Serial.println("An Error has occurred while mounting SPIFFS");
        return;
